@@ -80,6 +80,31 @@ namespace Tweetinvi.Streams
             _singleAggregateExceptionThrower.ExecuteActionAndThrowJustOneExceptionIfExist(startStreamAction);
         }
 
+	    public void ReceiveTweet(string json)
+	    {
+			RaiseJsonObjectReceived(json);
+
+			var tweet = _tweetFactory.GenerateTweetFromJson(json);
+			if (tweet == null)
+			{
+				TryInvokeGlobalStreamMessages(json);
+				return;
+			}
+
+			var matchingTrackAndActions = _streamTrackManager.GetMatchingTracksAndActions(tweet.Text);
+			var matchingTracks = matchingTrackAndActions.Select(x => x.Item1);
+			var machingLocationAndActions = GetMatchedLocations(tweet);
+
+			var matchingLocations = machingLocationAndActions.Select(x => x.Key);
+
+			CallMultipleActions(tweet, matchingTrackAndActions.Select(x => x.Item2));
+			CallMultipleActions(tweet, machingLocationAndActions.Select(x => x.Value));
+			CallFollowerAction(tweet);
+
+			RaiseMatchingTweetReceived(new MatchedTweetReceivedEventArgs(tweet, matchingTracks));
+			this.Raise(MatchingTweetAndLocationReceived, new MatchedTweetAndLocationReceivedEventArgs(tweet, matchingTracks, matchingLocations));
+		}
+
         public async Task StartStreamMatchingAnyConditionAsync()
         {
             Func<ITwitterQuery> generateWebRequest = () =>
@@ -90,30 +115,7 @@ namespace Tweetinvi.Streams
                 return _twitterQueryFactory.Create(queryBuilder.ToString(), HttpMethod.POST, Credentials);
             };
 
-            Action<string> tweetReceived = json =>
-            {
-                RaiseJsonObjectReceived(json);
-
-                var tweet = _tweetFactory.GenerateTweetFromJson(json);
-                if (tweet == null)
-                {
-                    TryInvokeGlobalStreamMessages(json);
-                    return;
-                }
-
-                var matchingTrackAndActions = _streamTrackManager.GetMatchingTracksAndActions(tweet.Text);
-                var matchingTracks = matchingTrackAndActions.Select(x => x.Item1);
-                var machingLocationAndActions = GetMatchedLocations(tweet);
-
-                var matchingLocations = machingLocationAndActions.Select(x => x.Key);
-
-                CallMultipleActions(tweet, matchingTrackAndActions.Select(x => x.Item2));
-                CallMultipleActions(tweet, machingLocationAndActions.Select(x => x.Value));
-                CallFollowerAction(tweet);
-
-                RaiseMatchingTweetReceived(new MatchedTweetReceivedEventArgs(tweet, matchingTracks));
-                this.Raise(MatchingTweetAndLocationReceived, new MatchedTweetAndLocationReceivedEventArgs(tweet, matchingTracks, matchingLocations));
-            };
+	        Action<string> tweetReceived = ReceiveTweet;
 
             await _streamResultGenerator.StartStreamAsync(tweetReceived, generateWebRequest);
         }

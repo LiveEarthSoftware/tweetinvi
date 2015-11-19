@@ -17,6 +17,8 @@ namespace Tweetinvi.Core.Interfaces.Streaminvi
         Task StartStreamMatchingAnyConditionAsync();
         Task StartStreamMatchingAllConditionsAsync();
 
+	    void ReceiveTweet(string json);
+
         #region Follow
         /// <summary>
         /// List of UserId followed by the stream
